@@ -20,6 +20,7 @@ resource "hcloud_server" "node" {
   name        = "${var.prefix}-node-${count.index + 1}"
   image       = var.server_image
   server_type = var.server_type
+  location    = var.server_location
 
   public_net {
     ipv4_enabled = true

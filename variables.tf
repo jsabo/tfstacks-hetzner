@@ -29,6 +29,12 @@ variable "network_zone" {
   default     = "eu-central"
 }
 
+variable "server_location" {
+  description = "The location name to create the server in."
+  type        = string
+  default     = "nbg1"
+}
+
 variable "server_count" {
   description = "The number of servers to create."
   type        = number
