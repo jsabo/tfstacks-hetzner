@@ -28,3 +28,13 @@ runcmd:
   - echo "Disabling swap"
   - swapoff -a
   - sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+  # Install and configure containerd
+  - echo "Installing and configuring containerd"
+  - apt update
+  - apt install -y containerd
+  - mkdir -p /etc/containerd
+  - containerd config default | tee /etc/containerd/config.toml
+  - sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+  - systemctl enable containerd
+  - systemctl restart containerd
