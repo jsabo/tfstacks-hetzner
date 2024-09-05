@@ -2,7 +2,7 @@ variable "hcloud_token" {
   description = "API token for Hetzner Cloud."
   type        = string
   sensitive   = true
-  default     = "" # Default to empty, will use environment TF_VAR_hcloud_token variable if set
+  default     = "" # Use TF_VAR_hcloud_token environment variable
 }
 
 variable "network_ip_range" {
