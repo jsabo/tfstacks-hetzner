@@ -10,7 +10,7 @@ tofo apply --auto-approve
 Setup Kubernetes
 
 ```
-hcloud server list
-
+ssh -l root $(hcloud server ip k8s-node-1)
+ssh -l root $(hcloud server ip k8s-node-2)
+ssh -l root $(hcloud server ip k8s-node-3)
 ```
-
