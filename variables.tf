@@ -20,7 +20,7 @@ variable "subnet_ip_range" {
 variable "prefix" {
   description = "Prefix for all resources."
   type        = string
-  default     = "ash"
+  default     = "k8s"
 }
 
 variable "network_zone" {
