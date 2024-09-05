@@ -34,7 +34,9 @@ resource "hcloud_server" "node" {
 
   ssh_keys = [hcloud_ssh_key.default.name]
 
-  user_data = file("${path.module}/cloud-init.yaml")
+  user_data = templatefile("${path.module}/cloud-init.tftpl", {
+    kubernetes_version = var.kubernetes_version
+  })
 
   depends_on = [hcloud_network_subnet.private_network_subnet]
 }
