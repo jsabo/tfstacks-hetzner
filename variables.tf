@@ -1,30 +1,30 @@
 variable "hcloud_token" {
-  description = "Hetzner Cloud API token."
+  description = "API token for Hetzner Cloud."
   type        = string
   sensitive   = true
   default     = "" # Default to empty, will use environment TF_VAR_hcloud_token variable if set
 }
 
 variable "network_ip_range" {
-  description = "The IP range for the Hetzner Cloud network."
+  description = "IP range for the cloud network."
   type        = string
   default     = "10.0.0.0/16"
 }
 
 variable "subnet_ip_range" {
-  description = "The IP range for the Hetzner Cloud network subnet."
+  description = "IP range for the network subnet."
   type        = string
   default     = "10.0.0.0/24"
 }
 
 variable "prefix" {
-  description = "Prefix for all resources."
+  description = "Resource name prefix."
   type        = string
   default     = "k8s"
 }
 
 variable "network_zone" {
-  description = "The Hetzner Cloud network zone for the subnet."
+  description = "Network zone for the subnet."
   type        = string
   default     = "us-east"
 
@@ -35,7 +35,7 @@ variable "network_zone" {
 }
 
 variable "server_location" {
-  description = "The location name to create the server in."
+  description = "Server location."
   type        = string
   default     = "ash"
 
@@ -46,25 +46,26 @@ variable "server_location" {
 }
 
 variable "server_count" {
-  description = "The number of servers to create."
+  description = "Number of servers."
   type        = number
   default     = 3
 }
 
 variable "server_image" {
-  description = "The image to use for the servers."
+  description = "Image for server instances."
   type        = string
   default     = "ubuntu-24.04"
 }
 
 variable "server_type" {
-  description = "The type of server to create."
+  description = "Type of server instance."
   type        = string
   default     = "cpx11"
 }
 
 variable "kubernetes_version" {
-  description = "Kubernetes component version"
+  description = "Version of Kubernetes."
   type        = string
   default     = "1.31"
 }
+
