@@ -30,6 +30,11 @@ resource "hcloud_server" "node" {
   network {
     network_id = hcloud_network.private_network.id
     ip         = cidrhost(hcloud_network_subnet.private_network_subnet.ip_range, count.index + 11)
+    alias_ips  = []
+  }
+
+  labels = {
+    "environment" : "${var.prefix}"
   }
 
   ssh_keys = [hcloud_ssh_key.default.name]
