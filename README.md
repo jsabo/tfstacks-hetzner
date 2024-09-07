@@ -6,6 +6,31 @@ tofu init --ugprade
 tofo apply --auto-approve
 ```
 
+```
+$ ansible-inventory -i hcloud.yml --graph
+@all:
+  |--@ungrouped:
+  |--@hcloud:
+  |  |--dev-node-1
+  |  |--dev-node-3
+  |  |--dev-node-2
+  |--@label_environment_dev:
+  |  |--dev-node-1
+  |  |--dev-node-3
+  |  |--dev-node-2
+  |--@type_cpx11:
+  |  |--dev-node-1
+  |  |--dev-node-3
+  |  |--dev-node-2
+  |--@location_ash:
+  |  |--dev-node-1
+  |  |--dev-node-3
+  |  |--dev-node-2
+  |--@status_running:
+  |  |--dev-node-1
+  |  |--dev-node-3
+  |  |--dev-node-2
+```
 
 Setup Kubernetes
 

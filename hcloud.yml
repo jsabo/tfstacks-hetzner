@@ -1,0 +1,16 @@
+plugin: hetzner.hcloud.hcloud
+api_token: "{{ lookup('env', 'HCLOUD_TOKEN') }}"
+group_by: server_type_label
+
+keyed_groups:
+  - key: labels
+    prefix: label
+  - key: server_type
+    prefix: type
+  - key: location
+    prefix: location
+  - key: status
+    prefix: status
+
+compose:
+  ansible_host: public_net.ipv4.ip

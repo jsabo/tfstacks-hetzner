@@ -1,0 +1,11 @@
+---
+- name: Gather facts from Hetzner Cloud servers
+  hosts: all
+  vars:
+    ansible_user: root
+  tasks:
+    - name: Gather facts
+      ansible.builtin.setup:
+    - name: Display hostname
+      debug:
+        msg: "{{ inventory_hostname }}"
