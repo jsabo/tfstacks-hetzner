@@ -4,6 +4,8 @@
 ```
 tofu init --ugprade
 tofo apply --auto-approve
+ansible-inventory -i hcloud.yml --graph
+ansible-playbook -i hcloud.yml setup-k8s.yml
 ```
 
 ```
@@ -32,7 +34,6 @@ $ ansible-inventory -i hcloud.yml --graph
   |  |--dev-node-2
 ```
 
-Setup Kubernetes
 
 ```
 ssh -l root $(hcloud server ip k8s-node-1)
