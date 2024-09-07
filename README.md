@@ -4,6 +4,8 @@
 ```
 tofu init --ugprade
 tofo apply --auto-approve
+
+```
 ansible-inventory -i hcloud.yml --graph
 ansible-playbook -i hcloud.yml setup-k8s.yml
 ```
