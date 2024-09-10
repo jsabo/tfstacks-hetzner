@@ -9,3 +9,4 @@
     - name: Display hostname
       debug:
         msg: "{{ inventory_hostname }}"
+    - ping:
