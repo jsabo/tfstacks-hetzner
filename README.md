@@ -15,3 +15,7 @@ ssh -l hcloud $(hcloud server ip dev-node-1)
 ssh -l hcloud $(hcloud server ip dev-node-2)
 ssh -l hcloud $(hcloud server ip dev-node-3)
 ```
+
+```
+tofu destroy --auto-approve
+```
