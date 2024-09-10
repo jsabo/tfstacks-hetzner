@@ -13,4 +13,3 @@ keyed_groups:
 
 compose:
   ansible_host: public_net.ipv4.ip
-  remote_user: root

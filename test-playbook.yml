@@ -1,8 +1,6 @@
 ---
 - name: Gather facts from Hetzner Cloud servers
   hosts: all
-  vars:
-    ansible_user: ubuntu
   tasks:
     - name: Gather facts
       ansible.builtin.setup:
@@ -10,3 +8,10 @@
       debug:
         msg: "{{ inventory_hostname }}"
     - ping:
+    - name: Run the id command as root
+      become: yes 
+      command: id
+      register: result
+    - name: Display the output of id command
+      debug:
+        var: result.stdout
