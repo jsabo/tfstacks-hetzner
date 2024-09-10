@@ -3,7 +3,57 @@
 package_update: true
 package_upgrade: true
 
+users:
+  - name: ubuntu
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh-authorized-keys:
+      - ${ssh_key} # This will be dynamically filled with the SSH key from Terraform
+    lock-passwd: true # Locks the password to prevent login with password
+    shell: /bin/bash
+
+disable_root: true
+
 runcmd:
+  # Create custom SSH configuration to harden SSH security
+  - |
+    echo "Applying SSH security hardening"
+    cat <<EOF | tee /etc/ssh/sshd_config.d/secure-ssh.conf
+    # Disable root SSH login
+    PermitRootLogin no
+
+    # Disable password authentication
+    PasswordAuthentication no
+    PermitEmptyPasswords no
+    ChallengeResponseAuthentication no
+
+    # Use only SSH protocol 2
+    Protocol 2
+
+    # Disable SSH agent forwarding and X11 forwarding
+    AllowAgentForwarding no
+    X11Forwarding no
+
+    # Disable TCP forwarding
+    AllowTcpForwarding no
+
+    # Set cryptographic algorithms
+    KexAlgorithms curve25519-sha256@libssh.org
+    Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com
+    MACs hmac-sha2-512,hmac-sha2-256
+
+    # Limit login attempts and sessions
+    MaxAuthTries 3
+    MaxSessions 2
+
+    # SSH idle timeout settings
+    ClientAliveInterval 300
+    ClientAliveCountMax 2
+    LoginGraceTime 60
+    EOF
+
+    # Restart the SSH service to apply changes
+    systemctl restart sshd
+    
   # Load necessary kernel modules and setup networking for Kubernetes
   - |
     echo "Loading kernel modules and setting up networking for Kubernetes"
