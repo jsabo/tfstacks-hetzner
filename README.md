@@ -2,7 +2,7 @@
 
 ```
 tofu init --ugprade
-tofo apply --auto-approve
+tofu apply --auto-approve
 ```
 
 ```
