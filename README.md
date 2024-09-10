@@ -1,7 +1,7 @@
 # tfstatcks-hetzner
 
 ```
-tofu init --ugprade
+tofu init --upgrade
 tofu apply --auto-approve
 ```
 
