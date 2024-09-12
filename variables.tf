@@ -48,7 +48,7 @@ variable "server_location" {
 variable "server_count" {
   description = "Number of servers."
   type        = number
-  default     = 4
+  default     = 3
 }
 
 variable "server_image" {
