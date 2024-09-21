@@ -1,5 +1,7 @@
 # tfstatcks-hetzner
 
+## Usage
+
 ```
 tofu init --upgrade
 tofu apply --auto-approve
