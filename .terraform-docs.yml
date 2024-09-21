@@ -1,0 +1,24 @@
+version: "0.18"
+formatter: markdown table
+output:
+  file: README.md
+  mode: inject
+sections:
+  header: true
+  inputs: true
+  outputs: true
+  providers: true
+  requirements: true
+  resources: true
+settings:
+  indent: 2
+  hide-empty: true # Hide sections if they are empty
+  show-required: true # Highlight required variables
+  show-type: true     # Display variable types
+  show-default: true  # Show default values for variables
+  show-sensitivity: true # Indicate if a variable is sensitive
+  color: false        # Set to false for generating plain markdown without color codes
+sort:
+  enabled: true
+  by: name # Sort by name for consistency
+

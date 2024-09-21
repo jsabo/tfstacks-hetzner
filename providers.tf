@@ -1,3 +1,5 @@
+# providers.tf - Contains provider requirements and configuration
+
 terraform {
   required_providers {
     hcloud = {
@@ -10,3 +12,4 @@ terraform {
 provider "hcloud" {
   token = var.hcloud_token
 }
+
