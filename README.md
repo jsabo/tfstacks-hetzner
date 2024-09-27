@@ -18,6 +18,7 @@ Run Ansible Playbooks
 ```
 ansible-inventory --graph
 ansible-playbook test-playbook.yml
+ansible-playbook create-cluster-kubeadm-playbook.yml
 ```
 
 Interactive Access
@@ -26,6 +27,12 @@ Interactive Access
 ssh -l hcloud $(hcloud server ip dev-node-1)
 ssh -l hcloud $(hcloud server ip dev-node-2)
 ssh -l hcloud $(hcloud server ip dev-node-3)
+```
+
+Reset Cluster
+
+```
+ansible-playbook reset-cluster-kubeadm-playbook.yml
 ```
 
 Cleanup
