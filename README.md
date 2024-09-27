@@ -2,6 +2,8 @@
 
 ## Usage
 
+Deploy Stack
+
 ```
 tofu init --upgrade
 tofu apply --auto-approve
