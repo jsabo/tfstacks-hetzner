@@ -26,9 +26,9 @@ ansible-playbook create-cluster-kubeadm-playbook.yml
 Interactive Access
 
 ```
-ssh -l hcloud $(hcloud server ip dev-node-1)
-ssh -l hcloud $(hcloud server ip dev-node-2)
-ssh -l hcloud $(hcloud server ip dev-node-3)
+ssh -l ubuntu $(hcloud server ip dev-node-1)
+ssh -l ubuntu $(hcloud server ip dev-node-2)
+ssh -l ubuntu $(hcloud server ip dev-node-3)
 ```
 
 Reset Cluster
