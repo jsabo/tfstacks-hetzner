@@ -1,4 +1,4 @@
-# tfstatcks-hetzner
+# tfstacks-hetzner
 
 ## Usage
 
