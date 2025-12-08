@@ -1,89 +1,203 @@
 # tfstacks-hetzner
 
-## Usage
+Kubernetes lab environment that can be spun up in two places:
 
-Deploy Stack
+- **Hetzner Cloud** (via OpenTofu/Terraform)
+- **Local VMs on macOS** (via Multipass)
 
-```
+Both environments use the same `cloud-init` template so you get a consistent Kubernetes-ready node layout everywhere.
+
+---
+
+## Components
+
+- **Hetzner infrastructure**
+  - `main.tf`, `providers.tf`, `variables.tf`, `outputs.tf`
+  - Creates a private network and a set of Ubuntu servers, prepped for Kubernetes
+- **Cloud-init**
+  - `cloud-init.tftpl` – parameterized template used by Hetzner and Multipass
+- **Ansible**
+  - `ansible.cfg` – points at dynamic inventories
+  - `hcloud.yml` – Hetzner dynamic inventory plugin
+  - `multipass_inventory.py` – dynamic inventory for Multipass VMs
+  - `test-playbook.yml` – simple connectivity + privilege sanity check
+
+---
+
+## Prerequisites
+
+On your local machine:
+
+- OpenTofu or Terraform (`tofu` is assumed in examples)
+- Ansible
+- Python 3
+- Multipass (macOS)
+- `envsubst` (`gettext` package on macOS)
+- SSH key pair (e.g. `~/.ssh/id_rsa` and `~/.ssh/id_rsa.pub`)
+- Hetzner Cloud account + API token
+
+Environment:
+
+```bash
+export TF_VAR_hcloud_token="<your-hetzner-token>"   # or set in a tfvars file
+export HCLOUD_TOKEN="$TF_VAR_hcloud_token"          # used by hcloud.yml
+````
+
+---
+
+## 1. Provision Hetzner Kubernetes Nodes
+
+From the repo root:
+
+```bash
 tofu init --upgrade
 tofu apply --auto-approve
 ```
 
-Run Ansible Tasks
+This will:
 
+* Create a Hetzner network + subnet
+* Create `server_count` nodes (see `variables.tf`)
+* Inject your SSH key into each node
+* Use `cloud-init.tftpl` to:
+
+  * Harden SSH
+  * Configure kernel modules and sysctl for Kubernetes
+  * Install containerd, kubelet, kubeadm, kubectl
+  * Configure `containerd` to use systemd cgroups
+
+To tear it down later:
+
+```bash
+tofu destroy --auto-approve
 ```
+
+---
+
+## 2. Launch Local Multipass Kubernetes Nodes
+
+You can reuse the same `cloud-init.tftpl` with Multipass by rendering it locally (replacing `${ssh_key}` and `${kubernetes_version}`) and passing the result to `multipass launch`.
+
+Example pattern:
+
+```bash
+SSH_KEY="$(cat ~/.ssh/id_rsa.pub)"
+K8S_VERSION="1.34"
+
+env ssh_key="$SSH_KEY" kubernetes_version="$K8S_VERSION" \
+  envsubst < cloud-init.tftpl > /tmp/cloud-init-rendered.yml
+
+multipass launch \
+  --name node-1 \
+  --memory 4G \
+  --disk 20G \
+  --cpus 2 \
+  --cloud-init /tmp/cloud-init-rendered.yml \
+  24.04
+```
+
+Repeat with `node-2`, `node-3`, etc., or wrap this in a small shell script if you haven’t already.
+
+---
+
+## 3. Ansible Inventory & Usage
+
+### Inventory sources
+
+`ansible.cfg` is configured to use:
+
+* `hcloud.yml` – discovers Hetzner nodes and exposes groups like `label_environment_<prefix>`
+* `multipass_inventory.py` – discovers running Multipass instances and puts them in group **`multipass`**
+
+Check the combined inventory:
+
+```bash
+ansible-inventory --graph
+```
+
+You should see groups like:
+
+* `multipass` (local VMs)
+* `label_environment_dev` (Hetzner nodes when `prefix = "dev"`)
+
+### Basic checks
+
+Ping all known hosts:
+
+```bash
 ansible -m ping all
 ```
 
-Run Ansible Playbooks
+Ping only Multipass nodes:
 
+```bash
+ansible multipass -m ping
 ```
-ansible-inventory --graph
+
+Ping only Hetzner “dev” nodes:
+
+```bash
+ansible label_environment_dev -m ping
+```
+
+### Run the test playbook
+
+Simple health check (facts, ping, `id` as root):
+
+```bash
 ansible-playbook test-playbook.yml
-ansible-playbook create-cluster-kubeadm-playbook.yml
 ```
 
-Interactive Access
+Limit to a specific group:
 
+```bash
+ansible-playbook -l multipass test-playbook.yml
+ansible-playbook -l label_environment_dev test-playbook.yml
 ```
+
+---
+
+## 4. Interactive Access
+
+### Hetzner nodes
+
+```bash
 ssh -l ubuntu $(hcloud server ip dev-node-1)
 ssh -l ubuntu $(hcloud server ip dev-node-2)
 ssh -l ubuntu $(hcloud server ip dev-node-3)
 ```
 
-Reset Cluster
+### Multipass nodes
 
-```
-ansible-playbook reset-cluster-kubeadm-playbook.yml
+```bash
+multipass list   # find IPs / names
+
+ssh ubuntu@<multipass-node-ip>
+# or, if you have hostnames in /etc/hosts or use mDNS:
+ssh ubuntu@node-1
 ```
 
-Cleanup
+---
 
-```
+## 5. Cleaning Up
+
+### Hetzner
+
+```bash
 tofu destroy --auto-approve
 ```
 
-<!-- BEGIN_TF_DOCS -->
-## Requirements
+### Multipass
 
-| Name | Version |
-|------|---------|
-| <a name="requirement_hcloud"></a> [hcloud](#requirement\_hcloud) | ~> 1.48.0 |
+```bash
+multipass delete --all
+multipass purge
+```
 
-## Providers
+---
 
-| Name | Version |
-|------|---------|
-| <a name="provider_hcloud"></a> [hcloud](#provider\_hcloud) | 1.48.1 |
+## Notes
 
-## Resources
-
-| Name | Type |
-|------|------|
-| [hcloud_network.private](https://registry.terraform.io/providers/hetznercloud/hcloud/latest/docs/resources/network) | resource |
-| [hcloud_network_subnet.subnet](https://registry.terraform.io/providers/hetznercloud/hcloud/latest/docs/resources/network_subnet) | resource |
-| [hcloud_server.node](https://registry.terraform.io/providers/hetznercloud/hcloud/latest/docs/resources/server) | resource |
-| [hcloud_ssh_key.default](https://registry.terraform.io/providers/hetznercloud/hcloud/latest/docs/resources/ssh_key) | resource |
-
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| <a name="input_hcloud_token"></a> [hcloud\_token](#input\_hcloud\_token) | (Required) API token for Hetzner Cloud.<br>Use the environment variable TF\_VAR\_hcloud\_token if you prefer not to hard-code this value. | `string` | `""` | no |
-| <a name="input_image"></a> [image](#input\_image) | (Required) The image to use for server instances.<br>Default: "ubuntu-24.04" | `string` | `"ubuntu-24.04"` | no |
-| <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | (Required) The version of Kubernetes to deploy on the server instances.<br>Default: "1.31"<br><br>Options:<br>- "1.31"<br>- "1.32" | `string` | `"1.31"` | no |
-| <a name="input_location"></a> [location](#input\_location) | (Required) The location for the server instances.<br><br>Options include:<br>- fsn1<br>- nbg1<br>- hel1<br>- ash<br>- hil<br>- sin | `string` | `"ash"` | no |
-| <a name="input_network_ip_range"></a> [network\_ip\_range](#input\_network\_ip\_range) | (Required) IP range for the cloud network.<br>Default: "10.0.0.0/16" | `string` | `"10.0.0.0/16"` | no |
-| <a name="input_network_zone"></a> [network\_zone](#input\_network\_zone) | (Required) The network zone for the subnet.<br><br>Options include:<br>- eu-central<br>- us-east<br>- us-west<br>- ap-southeast | `string` | `"us-east"` | no |
-| <a name="input_prefix"></a> [prefix](#input\_prefix) | (Required) A prefix for naming resources.<br>Default: "dev" | `string` | `"dev"` | no |
-| <a name="input_server_count"></a> [server\_count](#input\_server\_count) | (Required) The number of servers to create.<br>Default: 3 | `number` | `3` | no |
-| <a name="input_subnet_ip_range"></a> [subnet\_ip\_range](#input\_subnet\_ip\_range) | (Required) IP range for the network subnet.<br>Default: "10.0.0.0/24" | `string` | `"10.0.0.0/24"` | no |
-| <a name="input_type"></a> [type](#input\_type) | (Required) The type of server instance to create.<br>Default: "cpx11" | `string` | `"cpx11"` | no |
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The ID of the created Hetzner Cloud network. |
-| <a name="output_server_ips"></a> [server\_ips](#output\_server\_ips) | The IP addresses of all created servers. |
-<!-- END_TF_DOCS -->
+* Kubernetes minor version is controlled via `kubernetes_version` (Terraform variable and `cloud-init.tftpl` placeholder).
+* SSH access is **pubkey-only** by design. Make sure the key injected into `cloud-init.tftpl` matches the key you use locally.
+* The same cloud-init logic is shared between cloud (Hetzner) and local (Multipass) to keep your lab environments consistent.

@@ -41,7 +41,7 @@ resource "hcloud_server" "node" {
 
   ssh_keys = [hcloud_ssh_key.default.name]
 
-  user_data = templatefile("${path.module}/cloud-init.yaml", {
+  user_data = templatefile("${path.module}/cloud-init.tftpl", {
     kubernetes_version = var.kubernetes_version
     ssh_key            = hcloud_ssh_key.default.public_key
   })
