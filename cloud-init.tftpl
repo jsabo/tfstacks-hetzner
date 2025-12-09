@@ -7,7 +7,6 @@ users:
   - name: ubuntu
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh-authorized-keys:
-      # Terraform will inject the SSH public key here
       - ${ssh_key}
     lock-passwd: true
     shell: /bin/bash
@@ -23,47 +22,28 @@ packages:
   - containerd
 
 write_files:
-  # SSH hardening configuration
   - path: /etc/ssh/sshd_config.d/secure-ssh.conf
     owner: root:root
     permissions: '0644'
     content: |
-      # Disable root SSH login
       PermitRootLogin no
-
-      # Disable password authentication
       PasswordAuthentication no
       PermitEmptyPasswords no
       ChallengeResponseAuthentication no
-
-      # Use only SSH protocol 2
       Protocol 2
-
-      # Enable pubkey authentication
       PubkeyAuthentication yes
-
-      # Disable SSH agent forwarding and X11 forwarding
       AllowAgentForwarding no
       X11Forwarding no
-
-      # Disable TCP forwarding
       AllowTcpForwarding no
-
-      # Set cryptographic algorithms
       KexAlgorithms curve25519-sha256@libssh.org
       Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com
       MACs hmac-sha2-512,hmac-sha2-256
-
-      # Limit login attempts and sessions
       MaxAuthTries 3
       MaxSessions 2
-
-      # SSH idle timeout settings
       ClientAliveInterval 300
       ClientAliveCountMax 2
       LoginGraceTime 60
 
-  # Kernel modules needed for Kubernetes
   - path: /etc/modules-load.d/k8s.conf
     owner: root:root
     permissions: '0644'
@@ -71,7 +51,6 @@ write_files:
       overlay
       br_netfilter
 
-  # Sysctl settings for Kubernetes networking
   - path: /etc/sysctl.d/k8s.conf
     owner: root:root
     permissions: '0644'
@@ -94,7 +73,7 @@ write_files:
       ---
       apiVersion: kubeadm.k8s.io/v1beta4
       kind: ClusterConfiguration
-      kubernetesVersion: v1.34.0
+      kubernetesVersion: v${kubernetes_version}
       clusterName: homelab
       networking:
         serviceSubnet: 10.49.0.0/16
@@ -120,6 +99,11 @@ write_files:
       apiVersion: kubeproxy.config.k8s.io/v1alpha1
       kind: KubeProxyConfiguration
       mode: iptables
+      ---
+      apiVersion: kubelet.config.k8s.io/v1beta1
+      kind: KubeletConfiguration
+      serverTLSBootstrap: true
+      rotateCertificates: true
 
   - path: /etc/motd
     owner: root:root
@@ -137,34 +121,22 @@ write_files:
         1) Copy the "kubeadm join ..." command from the init output
         2) Run it on worker nodes to join them to the cluster
 
-
 runcmd:
-  # Load kernel modules and apply sysctl
   - [ modprobe, overlay ]
   - [ modprobe, br_netfilter ]
   - [ sysctl, --system ]
-
-  # Disable swap as required by Kubernetes
   - [ swapoff, -a ]
   - sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
-
-  # Configure Kubernetes apt repository (uses kubernetes_version from Terraform)
   - [ mkdir, -p, -m, "755", /etc/apt/keyrings ]
   - bash -c "curl -fsSL https://pkgs.k8s.io/core:/stable:/v${kubernetes_version}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
   - bash -c "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${kubernetes_version}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
-
-  # Install Kubernetes components
   - apt-get update
   - apt-get install -y kubelet kubeadm kubectl
   - apt-mark hold kubelet kubeadm kubectl
-
-  # Configure containerd to use systemd cgroups (recommended for kubeadm)
   - mkdir -p /etc/containerd
   - bash -c "containerd config default > /etc/containerd/config.toml"
   - sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
   - systemctl enable containerd
   - systemctl restart containerd
-
-  # Restart SSH to pick up hardening configuration
   - systemctl restart sshd
 
