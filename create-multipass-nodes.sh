@@ -11,7 +11,13 @@ IMAGE="24.04"                       # Ubuntu 24.04
 
 CLOUD_INIT_TEMPLATE="cloud-init.tftpl"
 SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/id_rsa.pub}"
-K8S_VERSION="${K8S_VERSION:-1.34}"  # matches your Terraform default
+
+# Single user-facing knob:
+# Full Kubernetes version (SemVer) used by kubeadm, e.g. 1.34.2
+# Override with: K8S_VERSION_FULL=1.34.3 ./create-multipass-nodes.sh
+K8S_VERSION_FULL="${K8S_VERSION_FULL:-1.34.2}"
+# Derived minor version for pkgs.k8s.io, e.g. 1.34
+K8S_VERSION_MINOR="${K8S_VERSION_FULL%.*}"
 # ---------------------------------------
 
 if [[ ! -f "$CLOUD_INIT_TEMPLATE" ]]; then
@@ -27,19 +33,23 @@ fi
 # Read the SSH public key (single line)
 SSH_KEY="$(cat "$SSH_KEY_FILE")"
 
-# Prepare a temp cloud-init file by substituting ${ssh_key} and ${kubernetes_version}
+# Prepare a temp cloud-init file by substituting ${ssh_key} and k8s vars
 TMP_CLOUD_INIT="$(mktemp)"
 trap 'rm -f "$TMP_CLOUD_INIT"' EXIT
 
 export ssh_key="$SSH_KEY"
-export kubernetes_version="$K8S_VERSION"
+# Used in pkgs.k8s.io repo URLs: v${kubernetes_version}
+export kubernetes_version="$K8S_VERSION_MINOR"
+# Used in kubeadm config: kubernetesVersion: v${kubernetes_version_full}
+export kubernetes_version_full="$K8S_VERSION_FULL"
 
-# envsubst will replace ${ssh_key} and ${kubernetes_version} in the template
+# envsubst will replace ${ssh_key}, ${kubernetes_version}, ${kubernetes_version_full}
 envsubst < "$CLOUD_INIT_TEMPLATE" > "$TMP_CLOUD_INIT"
 
-echo "Using Kubernetes version: $K8S_VERSION"
-echo "Using SSH key from:       $SSH_KEY_FILE"
-echo "Rendered cloud-init:      $TMP_CLOUD_INIT"
+echo "Using Kubernetes full version (kubeadm): $K8S_VERSION_FULL"
+echo "Using Kubernetes minor (pkgs.k8s.io):    $K8S_VERSION_MINOR"
+echo "Using SSH key from:                      $SSH_KEY_FILE"
+echo "Rendered cloud-init:                     $TMP_CLOUD_INIT"
 echo
 
 # Launch VMs
