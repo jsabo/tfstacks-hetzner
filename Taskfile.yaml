@@ -1,0 +1,256 @@
+version: "3"
+
+set: [errexit, nounset, pipefail]
+
+vars:
+  # Counts
+  CP_COUNT: '{{ default "1" .CP_COUNT }}'
+  WORKER_COUNT: '{{ default "2" .WORKER_COUNT }}'
+
+  # Kubernetes
+  K8S_VERSION_FULL: '{{ default "1.34.2" .K8S_VERSION_FULL }}'
+  CP0: "cp-0"
+
+  # SSH / cloud-init
+  SSH_KEY_FILE: '{{ default (printf "%s/.ssh/id_rsa.pub" .HOME) .SSH_KEY_FILE }}'
+  STATE_DIR: "{{.USER_WORKING_DIR}}/.state"
+  CLOUD_INIT_TEMPLATE: "{{.USER_WORKING_DIR}}/cloud-init.tftpl"
+  CLOUD_INIT_RENDERED: "{{.STATE_DIR}}/cloud-init.yaml"
+
+  # Multipass sizing
+  MP_IMAGE: '{{ default "24.04" .MP_IMAGE }}'
+  MP_CPUS: '{{ default "2" .MP_CPUS }}'
+  MP_MEM: '{{ default "4G" .MP_MEM }}'
+  MP_DISK: '{{ default "20G" .MP_DISK }}'
+
+  # kubeconfig output
+  KUBECONFIG_OUT: "{{.USER_WORKING_DIR}}/.kube/multipass-kubeconfig"
+
+tasks:
+  default:
+    desc: "List tasks"
+    silent: true
+    cmds:
+      - task --list
+
+  doctor:
+    desc: "Check prerequisites"
+    silent: true
+    preconditions:
+      - sh: command -v multipass >/dev/null
+        msg: "missing: multipass"
+      - sh: command -v envsubst >/dev/null
+        msg: "missing: envsubst (gettext)"
+      - sh: test -f "{{.CLOUD_INIT_TEMPLATE}}"
+        msg: "missing: {{.CLOUD_INIT_TEMPLATE}}"
+      - sh: test -f "{{.SSH_KEY_FILE}}"
+        msg: "missing: {{.SSH_KEY_FILE}}"
+    cmds:
+      - mkdir -p "{{.STATE_DIR}}" "{{.USER_WORKING_DIR}}/.kube"
+
+  cloud-init:render:
+    desc: "Render cloud-init template into .state/cloud-init.yaml"
+    silent: true
+    deps: [doctor]
+    sources:
+      - "{{.CLOUD_INIT_TEMPLATE}}"
+      - "{{.SSH_KEY_FILE}}"
+    generates:
+      - "{{.CLOUD_INIT_RENDERED}}"
+    method: timestamp
+    run: when_changed
+    status:
+      - test -s "{{.CLOUD_INIT_RENDERED}}"
+    cmds:
+      - |
+        SSH_KEY="$(cat "{{.SSH_KEY_FILE}}")"
+        K8S_MINOR="{{.K8S_VERSION_FULL}}"
+        K8S_MINOR="${K8S_MINOR%.*}"
+
+        export ssh_key="$SSH_KEY"
+        export kubernetes_version_full="{{.K8S_VERSION_FULL}}"
+        export kubernetes_version="$K8S_MINOR"
+
+        envsubst < "{{.CLOUD_INIT_TEMPLATE}}" > "{{.CLOUD_INIT_RENDERED}}"
+        echo "Rendered: {{.CLOUD_INIT_RENDERED}}"
+
+  # ---------------- VM lifecycle ----------------
+
+  vm:launch:
+    desc: "Launch one VM (NAME=cp-0|worker-0)"
+    silent: true
+    deps: [cloud-init:render]
+    requires:
+      vars: [NAME]
+    status:
+      - multipass info "{{.NAME}}" >/dev/null 2>&1
+    cmds:
+      - |
+        echo "Launching {{.NAME}}..."
+        multipass launch \
+          --name "{{.NAME}}" \
+          --memory "{{.MP_MEM}}" \
+          --disk "{{.MP_DISK}}" \
+          --cpus "{{.MP_CPUS}}" \
+          --cloud-init "{{.CLOUD_INIT_RENDERED}}" \
+          "{{.MP_IMAGE}}"
+
+  vm:up:
+    desc: "Create cp-0..cp-(N-1) and worker-0..worker-(M-1)"
+    silent: true
+    deps: [cloud-init:render]
+    cmds:
+      - |
+        CP_N="{{.CP_COUNT}}"
+        WK_N="{{.WORKER_COUNT}}"
+
+        if [ "$CP_N" -lt 1 ]; then
+          echo "CP_COUNT must be >= 1"
+          exit 1
+        fi
+
+        for i in $(seq 0 $((CP_N-1))); do
+          task vm:launch NAME="cp-$i"
+        done
+
+        for i in $(seq 0 $((WK_N-1))); do
+          task vm:launch NAME="worker-$i"
+        done
+
+        multipass list
+
+  vm:list:
+    desc: "List VMs"
+    silent: true
+    cmds:
+      - multipass list
+
+  vm:shell:
+    desc: "Shell into a VM (VM=cp-0)"
+    silent: true
+    vars:
+      VM: '{{ default "cp-0" .VM }}'
+    cmds:
+      - multipass shell "{{.VM}}"
+
+  vm:down:
+    desc: "Delete all cp-* and worker-* VMs + local state"
+    silent: true
+    cmds:
+      - |
+        NAMES="$(multipass list --format csv | awk -F, 'NR>1 {print $1}' | egrep '^(cp|worker)-[0-9]+$' || true)"
+        if [ -n "$NAMES" ]; then
+          echo "$NAMES" | xargs -n1 multipass delete
+          multipass purge
+        fi
+        rm -rf "{{.STATE_DIR}}"
+        echo "Done."
+
+  # ---------------- Kubernetes bootstrap ----------------
+
+  k8s:init:
+    desc: "Initialize cluster on cp-0 if needed; write join scripts"
+    silent: true
+    deps: [vm:up]
+    status:
+      - multipass exec "{{.CP0}}" -- bash -lc 'test -f /etc/kubernetes/admin.conf' >/dev/null 2>&1
+      - test -f "{{.STATE_DIR}}/join-worker.sh"
+      - test -f "{{.STATE_DIR}}/join-control-plane.sh"
+    cmds:
+      - |
+        echo "Patching advertiseAddress on {{.CP0}}..."
+        multipass exec "{{.CP0}}" -- bash -lc '
+          IP="$(hostname -I | awk "{print \$1}")"
+          sudo sed -i "s/advertiseAddress: 0.0.0.0/advertiseAddress: ${IP}/" /etc/kubernetes/kubeadm-config.yaml || true
+        '
+
+        echo "Running kubeadm init on {{.CP0}} (if not already initialized)..."
+        multipass exec "{{.CP0}}" -- bash -lc '
+          if [ -f /etc/kubernetes/admin.conf ]; then
+            echo "✓ already initialized"
+            exit 0
+          fi
+          sudo kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --upload-certs
+          mkdir -p "$HOME/.kube"
+          sudo cp -f /etc/kubernetes/admin.conf "$HOME/.kube/config"
+          sudo chown $(id -u):$(id -g) "$HOME/.kube/config"
+        '
+
+        echo "Creating join commands..."
+        CERT_KEY="$(multipass exec "{{.CP0}}" -- bash -lc "sudo kubeadm init phase upload-certs --upload-certs | tail -n1")"
+        JOIN_BASE="$(multipass exec "{{.CP0}}" -- bash -lc "sudo kubeadm token create --print-join-command")"
+
+        mkdir -p "{{.STATE_DIR}}"
+
+        printf '%s\n' "$JOIN_BASE" > "{{.STATE_DIR}}/join-base.txt"
+        printf '%s\n' "$CERT_KEY"  > "{{.STATE_DIR}}/cert-key.txt"
+
+        cat > "{{.STATE_DIR}}/join-worker.sh" <<EOF
+        #!/usr/bin/env bash
+        set -euo pipefail
+        sudo ${JOIN_BASE} --cri-socket unix:///run/containerd/containerd.sock
+        EOF
+
+        cat > "{{.STATE_DIR}}/join-control-plane.sh" <<EOF
+        #!/usr/bin/env bash
+        set -euo pipefail
+        sudo ${JOIN_BASE} --control-plane --certificate-key ${CERT_KEY} --cri-socket unix:///run/containerd/containerd.sock
+        EOF
+
+        chmod +x "{{.STATE_DIR}}/join-worker.sh" "{{.STATE_DIR}}/join-control-plane.sh"
+        echo "✓ join scripts written to {{.STATE_DIR}}/"
+
+  k8s:join:
+    desc: "Join cp-1.. and worker-0.. to the cluster"
+    silent: true
+    deps: [k8s:init]
+    cmds:
+      - |
+        CP_N="{{.CP_COUNT}}"
+        WK_N="{{.WORKER_COUNT}}"
+
+        # join additional control-planes (skip cp-0)
+        if [ "$CP_N" -gt 1 ]; then
+          for i in $(seq 1 $((CP_N-1))); do
+            echo "Joining control-plane cp-$i..."
+            multipass exec "cp-$i" -- bash -lc "$(cat "{{.STATE_DIR}}/join-control-plane.sh")"
+          done
+        fi
+
+        # join workers (start at 0)
+        if [ "$WK_N" -gt 0 ]; then
+          for i in $(seq 0 $((WK_N-1))); do
+            echo "Joining worker worker-$i..."
+            multipass exec "worker-$i" -- bash -lc "$(cat "{{.STATE_DIR}}/join-worker.sh")"
+          done
+        fi
+
+        echo "✓ join complete"
+
+  k8s:kubeconfig:
+    desc: "Export kubeconfig from cp-0 to .kube/multipass-kubeconfig"
+    silent: true
+    deps: [k8s:init]
+    cmds:
+      - |
+        multipass exec "{{.CP0}}" -- bash -lc 'cat "$HOME/.kube/config"' > "{{.KUBECONFIG_OUT}}"
+        echo "Wrote kubeconfig: {{.KUBECONFIG_OUT}}"
+        echo "Use: KUBECONFIG={{.KUBECONFIG_OUT}} kubectl get nodes"
+
+  k8s:status:
+    desc: "Show node status using exported kubeconfig"
+    silent: true
+    deps: [k8s:kubeconfig]
+    cmds:
+      - KUBECONFIG="{{.KUBECONFIG_OUT}}" kubectl get nodes -o wide
+
+  k8s:up:
+    desc: "Full bring-up: VMs + init + join + kubeconfig export + status"
+    silent: true
+    cmds:
+      - task vm:up
+      - task k8s:init
+      - task k8s:join
+      - task k8s:kubeconfig
+      - task k8s:status
+

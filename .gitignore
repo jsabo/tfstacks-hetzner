@@ -36,3 +36,8 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Ignore Taskfile metadata and state
+.state
+.task
+.kube
